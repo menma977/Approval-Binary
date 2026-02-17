@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Menma\Approval\Interfaces\ApprovalContributorInterface;
 use Menma\Approval\Interfaces\ApprovalServiceInterface;
+use Menma\Approval\Interfaces\DynamicMaskingInterface;
 use Menma\Approval\Models\ApprovalEvent;
 use Menma\Approval\Services\ApprovalService;
 
-abstract class ApprovalAbstract extends Model implements ApprovalContributorInterface
+abstract class ApprovalAbstract extends Model implements ApprovalContributorInterface, DynamicMaskingInterface
 {
 	/**
 	 * @return MorphOne<ApprovalEvent, $this>
@@ -84,6 +85,17 @@ abstract class ApprovalAbstract extends Model implements ApprovalContributorInte
 	public function scopeWithUsers(Builder $query): Builder
 	{
 		return $query->with(["createdBy", "updatedBy", "deletedBy"]);
+	}
+
+	/**
+	 * @param \Illuminate\Database\Eloquent\Builder<static> $query
+	 * @param int $target The bitmask target to filter by
+	 * @return \Illuminate\Database\Eloquent\Builder<static>
+	 * @noinspection PhpUnused
+	 */
+	public function scopeWhereApprovalTarget(Builder $query, int $target): Builder
+	{
+		return $query->whereHas('event', fn(Builder $eventQuery) => $eventQuery->where('target', $target));
 	}
 
 	protected function approvalService(): ApprovalServiceInterface

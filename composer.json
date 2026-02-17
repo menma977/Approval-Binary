@@ -2,7 +2,7 @@
  "name": "menma/approval-binary",
  "description": "Binary approval engine for Laravel",
  "type": "library",
- "license": "MIT",
+ "license": "AGPL-3.0-or-later",
  "autoload": {
   "psr-4": {
    "Menma\\Approval\\": "src/"
@@ -17,8 +17,8 @@
  },
  "require": {
   "php": "^8.1",
-  "illuminate/support": "^10.0|^11.0",
-  "illuminate/database": "^10.0|^11.0",
-  "illuminate/http": "^10.0|^11.0"
+  "illuminate/support": "^10.0|^11.0|^12.0",
+  "illuminate/database": "^10.0|^11.0|^12.0",
+  "illuminate/http": "^10.0|^11.0|^12.0"
  }
 }
