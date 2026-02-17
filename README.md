@@ -164,4 +164,4 @@ $service->approve($model, $user);
 
 ## License
 
-GNU General Public License v3.0
+GNU AGPLv3
