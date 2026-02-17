@@ -111,4 +111,15 @@ class Approval extends ApprovalCoreAbstract
 	{
 		return $this->hasMany(ApprovalEvent::class);
 	}
+
+	/**
+	 * Get the conditions associated with the approval.
+	 * Used for conditional dynamic masking (Smart Threshold).
+	 *
+	 * @return HasMany<ApprovalCondition, $this>
+	 */
+	public function conditions(): HasMany
+	{
+		return $this->hasMany(ApprovalCondition::class);
+	}
 }

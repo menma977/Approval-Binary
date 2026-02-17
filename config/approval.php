@@ -82,4 +82,20 @@ return [
 		// App\Models\Department::class,
 		// App\Models\Position::class,
 	],
+
+	/*
+	|--------------------------------------------------------------------------
+	| Conditional Dynamic Masking Operators
+	|--------------------------------------------------------------------------
+	|
+	| Allowed operators for approval conditions.
+	| These are used to compare model properties against thresholds
+	| in the approval_conditions table.
+	|
+	| Models that implement DynamicMaskingInterface can have their
+	| approval target mask dynamically determined based on these conditions.
+	|
+	*/
+	"operators" => ["<", ">", "<=", ">=", "==", "!="],
 ];
+
