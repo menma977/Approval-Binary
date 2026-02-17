@@ -59,9 +59,8 @@ Extend `ApprovalAbstract` and optionally implement `DynamicMaskingInterface` for
 
 ```php
 use Menma\Approval\Abstracts\ApprovalAbstract;
-use Menma\Approval\Interfaces\DynamicMaskingInterface;
 
-class PurchaseOrder extends ApprovalAbstract implements DynamicMaskingInterface
+class PurchaseOrder extends ApprovalAbstract
 {
     // Return users who can approve this specific record (if applicable)
     public function getApproverIds(): array
