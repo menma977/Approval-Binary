@@ -13,7 +13,7 @@ workflow automation, and high-performance querying.
 ### 1. Install via Composer
 
 ```bash
-composer require menma/approval
+composer require menma/approval-binary
 ```
 
 ### 2. Publish Configuration
