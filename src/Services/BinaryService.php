@@ -55,12 +55,20 @@ class BinaryService implements ApprovalServiceInterface
 	{
 		if (empty($type)) {
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.model_type_required'),
+				'message' => trans('approval::approval.message.fail.model.type'),
 			]);
 		}
 
 		$instance = new self;
-		$instance->model = app($type)->find($id);
+		$found = app($type)->find($id);
+
+		if (!$found) {
+			throw ValidationException::withMessages([
+				'message' => trans('approval::approval.message.fail.model.undefined'),
+			]);
+		}
+
+		$instance->model = $found;
 
 		return $instance;
 	}
@@ -111,7 +119,7 @@ class BinaryService implements ApprovalServiceInterface
 		$foundUser = app($this->userModel)::find($user);
 		if (!$foundUser) {
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.user_not_found'),
+				'message' => trans('approval::approval.message.fail.user.undefined'),
 			]);
 		}
 
@@ -137,8 +145,10 @@ class BinaryService implements ApprovalServiceInterface
 			->where('requestable_id', $this->model->getKey())
 			->when($this->status, function ($query) {
 				return $query->where('status', $this->status);
-			})->when($this->binary, function ($query) {
-				return $query->where('approvable_id', $this->binary);
+			})->when($this->binary !== null, function ($query) {
+				return $query->whereHas('components', function ($q) {
+					$q->whereRaw('(step & ?) = ?', [$this->binary, $this->binary]);
+				});
 			})
 			->first();
 	}
@@ -158,7 +168,7 @@ class BinaryService implements ApprovalServiceInterface
 			}
 
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.store_failed', [
+				'message' => trans('approval::approval.message.fail.store', [
 					'error' => $exception->getMessage(),
 				]),
 			]);
@@ -180,7 +190,7 @@ class BinaryService implements ApprovalServiceInterface
 			}
 
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.approve_failed', [
+				'message' => trans('approval::approval.message.fail.approve', [
 					'error' => $exception->getMessage(),
 				]),
 			]);
@@ -202,7 +212,7 @@ class BinaryService implements ApprovalServiceInterface
 			}
 
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.reject_failed', [
+				'message' => trans('approval::approval.message.fail.reject', [
 					'error' => $exception->getMessage(),
 				]),
 			]);
@@ -224,7 +234,7 @@ class BinaryService implements ApprovalServiceInterface
 			}
 
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.cancel_failed', [
+				'message' => trans('approval::approval.message.fail.cancel', [
 					'error' => $exception->getMessage(),
 				]),
 			]);
@@ -239,14 +249,14 @@ class BinaryService implements ApprovalServiceInterface
 	public function rollback(): ApprovalEvent
 	{
 		try {
-			return $this->actionService->rollback($this->model, $this->resolveUser());
+			return $this->actionService->rollback($this->model);
 		} catch (Throwable $exception) {
 			if ($exception instanceof ValidationException) {
 				throw $exception;
 			}
 
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.rollback_failed', [
+				'message' => trans('approval::approval.message.fail.rollback', [
 					'error' => $exception->getMessage(),
 				]),
 			]);
@@ -268,7 +278,7 @@ class BinaryService implements ApprovalServiceInterface
 			}
 
 			throw ValidationException::withMessages([
-				'message' => trans('approval::approval.error.force_failed', [
+				'message' => trans('approval::approval.message.fail.force', [
 					'error' => $exception->getMessage(),
 				]),
 			]);

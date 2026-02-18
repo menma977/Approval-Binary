@@ -23,9 +23,6 @@ class ApprovalService
 	 */
 	public function forBinary(Model $model): ApprovalServiceInterface
 	{
-		/** @var BinaryService $service */
-		$service = app(BinaryService::class);
-
-		return $service::model($model->getMorphClass(), $model->getKey());
+		return BinaryService::model($model->getMorphClass(), $model->getKey());
 	}
 }

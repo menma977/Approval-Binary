@@ -107,6 +107,8 @@ class ApprovalCondition extends ApprovalCoreAbstract
 			'>=' => $value >= $threshold,
 			'==' => $value == $threshold,
 			'!=' => $value != $threshold,
+			'===' => $value === $threshold,
+			'!===' => $value !== $threshold,
 			default => false,
 		};
 	}

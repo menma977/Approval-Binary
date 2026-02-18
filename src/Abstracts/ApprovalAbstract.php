@@ -21,10 +21,19 @@ abstract class ApprovalAbstract extends Model implements ApprovalContributorInte
 		return $this->morphOne(ApprovalEvent::class, "requestable");
 	}
 
+	public function getApproverIds(): array
+	{
+		return [];
+	}
+
+	public function getApprovalConditions(): array
+	{
+		return [];
+	}
+
 	public function initEvent(Model $user): void
 	{
 		$this->approvalService()
-			->model($this::class, $this->getKey())
 			->user($user->id)
 			->store();
 	}
@@ -53,17 +62,17 @@ abstract class ApprovalAbstract extends Model implements ApprovalContributorInte
 		$this->onRollback($approvalEvent);
 	}
 
-	public function force(
-		Model   $user,
-		?int    $binary = null,
-		?string $status = null,
-	): void
+	public function force(Model $user, ?int $binary = null, ?string $status = null): void
 	{
-		$approvalEvent = $this->approvalService()
+		$service = $this->approvalService()
 			->user($user->id)
-			->binary($binary ?? 0)
-			->status($status ?? "")
-			->force();
+			->binary($binary ?? 0);
+
+		if ($status !== null) {
+			$service->status($status);
+		}
+
+		$approvalEvent = $service->force();
 		$this->onForce($approvalEvent);
 	}
 

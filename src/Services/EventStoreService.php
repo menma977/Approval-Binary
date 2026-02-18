@@ -61,8 +61,6 @@ class EventStoreService
 		$conditionResolver = app(ConditionResolverService::class);
 
 		return DB::transaction(function () use ($model, $conditionResolver) {
-			// ... (rest of code) ...
-
 			$approvalEvent = ApprovalEvent::where('requestable_type', $model->getMorphClass())
 				->where('requestable_id', $model->getKey())
 				->lockForUpdate()
@@ -128,10 +126,10 @@ class EventStoreService
 								}
 							}
 						} else {
-							$approvalContributor = new ApprovalEventContributor;
-							$approvalContributor->approval_event_component_id = $approvalEventComponent->id;
-							$approvalContributor->user_id = (int)$contributor->approvable_id;
-							$approvalContributor->save();
+							$newEventContributor = new ApprovalEventContributor;
+							$newEventContributor->approval_event_component_id = $approvalEventComponent->id;
+							$newEventContributor->user_id = (int)$contributor->approvable_id;
+							$newEventContributor->save();
 							$componentHasContributor = true;
 						}
 					}

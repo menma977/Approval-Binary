@@ -30,7 +30,7 @@ php artisan vendor:publish --tag=approval-migration
 php artisan vendor:publish --tag=approval-config
 ```
 
-#### 2.3 config
+#### 2.3 lang
 
 ```bash
 php artisan vendor:publish --tag=approval-lang
@@ -46,7 +46,7 @@ php artisan migrate
 
 ### Binary Bitmask System
 
-Each approval step is assigned a unique bit position. The `target` integer stores the require set of approvals (mask), and `step` integer tracks the completed approvals.
+Each approval step is assigned a unique bit position. The `target` integer stores the required set of approvals (mask), and `step` integer tracks the completed approvals.
 
 | Component | Step | Bit Position | Mask Value       |
 |-----------|------|--------------|------------------|
@@ -63,13 +63,13 @@ The plugin is architected around specialized services for robust workflow manage
 
 - **EventStoreService**: Handles the creation, retrieval, and initialization of `ApprovalEvent`s. Determines the correct flow and assigns contributors.
 - **EventActionService**: Orchestrates state changes (Approve, Reject, Cancel). Handles complex logic like Parallel user detection and Sequential order enforcement.
-- **ConditionResolverService**: Evals dynamic conditions (e.g., "Amount > 1000") to filter required steps at runtime (Dynamic Masking).
+- **ConditionResolverService**: Evaluates dynamic conditions (e.g., "Amount > 1000") to filter required steps at runtime (Dynamic Masking).
 
 ## Usage
 
 ### 1. Prepare Your Model
 
-Extend `ApprovalAbstract` and optionally implement `DynamicMaskingInterface` for conditional logic.
+Extend `ApprovalAbstract`. Since `ApprovalAbstract` implements `ApprovalContributorInterface` and `DynamicMaskingInterface`, you must implement the required methods.
 
 ```php
 use Menma\Approval\Abstracts\ApprovalAbstract;
@@ -79,7 +79,7 @@ class PurchaseOrder extends ApprovalAbstract
     // Return users who can approve this specific record (if applicable)
     public function getApproverIds(): array
     {
-        return $this->user_id ? [$this->user->manager_id] : [];
+        return $this->user_id ? [$this->position->user_id] : [];
     }
 
     // Expose data for Conditional Logic
@@ -94,6 +94,8 @@ class PurchaseOrder extends ApprovalAbstract
     // Lifecycle Hooks
     protected function onApprove(ApprovalEvent $event): void { /* ... */ }
     protected function onReject(ApprovalEvent $event): void { /* ... */ }
+    protected function onCancel(ApprovalEvent $event): void { /* ... */ }
+    protected function onRollback(ApprovalEvent $event): void { /* ... */ }
 }
 ```
 
@@ -162,6 +164,15 @@ $foo->approve($user);
 
 // Reject
 $foo->reject($user);
+
+// Cancel
+$foo->cancel($user);
+
+// Rollback
+$foo->rollback($user);
+
+// Force Approve (Skip Smart Detection)
+$foo->force($user, 5, ApprovalStatusEnum::DRAFT->value);
 
 // Check Status
 if ($foo->isApproved()) { ... }

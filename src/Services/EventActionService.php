@@ -83,7 +83,7 @@ class EventActionService
 
 				if (!$approvalEventContributor) {
 					throw ValidationException::withMessages([
-						'approval_event_contributor' => trans('approval::approval.fail.action.cost', [
+						'approval_event_contributor' => trans('approval::approval.message.fail.action.cost', [
 							'action' => 'Approve',
 							'attribute' => $approvalEventComponent->name,
 							'target' => $this->storeService->getUserName($user),
@@ -145,6 +145,10 @@ class EventActionService
 		return DB::transaction(function () use ($model, $user, $binary) {
 			$approvalEvent = $this->storeService->store($model);
 
+			if ($approvalEvent->is_approved || $approvalEvent->is_rejected || $approvalEvent->is_cancelled) {
+				return $approvalEvent;
+			}
+
 			$approvalEventComponent = $this->getFirstEventComponent($approvalEvent, $binary, $user);
 			if (!$approvalEventComponent) {
 				$approvalEvent->status = ApprovalStatusEnum::REJECTED;
@@ -156,10 +160,11 @@ class EventActionService
 
 			$approvalEventContributor = ApprovalEventContributor::where('approval_event_component_id', $approvalEventComponent->id)
 				->where('user_id', $user->id)
+				->lockForUpdate()
 				->first();
 			if (!$approvalEventContributor) {
 				throw ValidationException::withMessages([
-					'approval_event_contributor' => trans('approval::approval.fail.action.cost', [
+					'approval_event_contributor' => trans('approval::approval.message.fail.action.cost', [
 						'action' => 'Reject',
 						'attribute' => $approvalEventComponent->name,
 						'target' => $this->storeService->getUserName($user),
@@ -175,15 +180,13 @@ class EventActionService
 			if ($approvalEventComponent->type === ContributorTypeEnum::OR) {
 				$shouldRejectComponent = true;
 			} else {
-				$contributors = ApprovalEventContributor::where('approval_event_component_id', $approvalEventComponent->id)->get();
+				$approvalCount = ApprovalEventContributor::where('approval_event_component_id', $approvalEventComponent->id)
+					->whereNotNull('approved_at')
+					->count();
 
-				$approvalCount = $contributors->filter(function ($contributor) {
-					return $contributor->approved_at !== null;
-				})->count();
-
-				$rejectionCount = $contributors->filter(function ($contributor) {
-					return $contributor->rejected_at !== null;
-				})->count();
+				$rejectionCount = ApprovalEventContributor::where('approval_event_component_id', $approvalEventComponent->id)
+					->whereNotNull('rejected_at')
+					->count();
 
 				if ($rejectionCount > $approvalCount) {
 					$shouldRejectComponent = true;
@@ -220,6 +223,10 @@ class EventActionService
 	{
 		return DB::transaction(function () use ($model, $user, $binary) {
 			$approvalEvent = $this->storeService->store($model);
+
+			if ($approvalEvent->is_approved || $approvalEvent->is_rejected || $approvalEvent->is_cancelled) {
+				return $approvalEvent;
+			}
 
 			$approvalEventComponent = $this->getFirstEventComponent($approvalEvent, $binary, $user);
 			if (!$approvalEventComponent) {
@@ -262,12 +269,11 @@ class EventActionService
 	 * Uses ConditionResolverService to apply dynamic masking during rollback.
 	 *
 	 * @param Model $model The model being rolled back
-	 * @param Authenticatable $user The user performing the rollback
 	 * @return ApprovalEvent The updated approval event
 	 *
 	 * @throws Throwable When database transaction fails
 	 */
-	public function rollback(Model $model, Authenticatable $user): ApprovalEvent
+	public function rollback(Model $model): ApprovalEvent
 	{
 		$conditionResolver = app(ConditionResolverService::class);
 
@@ -401,7 +407,7 @@ class EventActionService
 	 */
 	private function getFirstEventComponent(ApprovalEvent $approvalEvent, ?int $binary = null, ?Authenticatable $user = null): ?ApprovalEventComponent
 	{
-		if ($binary) {
+		if ($binary !== null) {
 			return ApprovalEventComponent::where('approval_event_id', $approvalEvent->id)
 				->whereNull('approved_at')
 				->whereRaw('(step & ?) = ?', [$binary, $binary])

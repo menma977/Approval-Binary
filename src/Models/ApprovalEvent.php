@@ -256,7 +256,7 @@ class ApprovalEvent extends ApprovalCoreAbstract
 			}
 
 			foreach ($contributors as $contributor) {
-				if ((int)$contributor->user_id === (int)Auth::id()) {
+				if ((int)$contributor->user_id === (int)Auth::id() && $contributor->approved_at === null) {
 					return true;
 				}
 			}
