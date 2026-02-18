@@ -1,4 +1,21 @@
 <?php
+/*******************************************************************************
+ * Approval-Binary - Binary bitmask-based approval workflows for Laravel
+ * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 namespace Menma\Approval\Services;
 
@@ -61,8 +78,6 @@ class EventStoreService
 		$conditionResolver = app(ConditionResolverService::class);
 
 		return DB::transaction(function () use ($model, $conditionResolver) {
-			// ... (rest of code) ...
-
 			$approvalEvent = ApprovalEvent::where('requestable_type', $model->getMorphClass())
 				->where('requestable_id', $model->getKey())
 				->lockForUpdate()
@@ -128,10 +143,10 @@ class EventStoreService
 								}
 							}
 						} else {
-							$approvalContributor = new ApprovalEventContributor;
-							$approvalContributor->approval_event_component_id = $approvalEventComponent->id;
-							$approvalContributor->user_id = (int)$contributor->approvable_id;
-							$approvalContributor->save();
+							$newEventContributor = new ApprovalEventContributor;
+							$newEventContributor->approval_event_component_id = $approvalEventComponent->id;
+							$newEventContributor->user_id = (int)$contributor->approvable_id;
+							$newEventContributor->save();
 							$componentHasContributor = true;
 						}
 					}

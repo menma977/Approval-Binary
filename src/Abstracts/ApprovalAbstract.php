@@ -1,4 +1,21 @@
 <?php
+/*******************************************************************************
+ * Approval-Binary - Binary bitmask-based approval workflows for Laravel
+ * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 namespace Menma\Approval\Abstracts;
 
@@ -21,10 +38,19 @@ abstract class ApprovalAbstract extends Model implements ApprovalContributorInte
 		return $this->morphOne(ApprovalEvent::class, "requestable");
 	}
 
+	public function getApproverIds(): array
+	{
+		return [];
+	}
+
+	public function getApprovalConditions(): array
+	{
+		return [];
+	}
+
 	public function initEvent(Model $user): void
 	{
 		$this->approvalService()
-			->model($this::class, $this->getKey())
 			->user($user->id)
 			->store();
 	}
@@ -53,17 +79,17 @@ abstract class ApprovalAbstract extends Model implements ApprovalContributorInte
 		$this->onRollback($approvalEvent);
 	}
 
-	public function force(
-		Model   $user,
-		?int    $binary = null,
-		?string $status = null,
-	): void
+	public function force(Model $user, ?int $binary = null, ?string $status = null): void
 	{
-		$approvalEvent = $this->approvalService()
+		$service = $this->approvalService()
 			->user($user->id)
-			->binary($binary ?? 0)
-			->status($status ?? "")
-			->force();
+			->binary($binary ?? 0);
+
+		if ($status !== null) {
+			$service->status($status);
+		}
+
+		$approvalEvent = $service->force();
 		$this->onForce($approvalEvent);
 	}
 

@@ -20,5 +20,20 @@
   "illuminate/support": "^10.0|^11.0|^12.0",
   "illuminate/database": "^10.0|^11.0|^12.0",
   "illuminate/http": "^10.0|^11.0|^12.0"
+ },
+ "autoload-dev": {
+  "psr-4": {
+   "Menma\\Approval\\Tests\\": "tests/"
+  }
+ },
+ "require-dev": {
+  "orchestra/testbench": "^10.9",
+  "pestphp/pest": "^3.0",
+  "pestphp/pest-plugin-laravel": "^3.0"
+ },
+ "config": {
+  "allow-plugins": {
+   "pestphp/pest-plugin": true
+  }
  }
 }
