@@ -16,10 +16,24 @@ workflow automation, and high-performance querying.
 composer require menma/approval-binary
 ```
 
-### 2. Publish Configuration
+### 2. Publish
+
+#### 2.1 migration
+
+```bash
+php artisan vendor:publish --tag=approval-migration
+```
+
+#### 2.2 config
 
 ```bash
 php artisan vendor:publish --tag=approval-config
+```
+
+#### 2.3 config
+
+```bash
+php artisan vendor:publish --tag=approval-lang
 ```
 
 ### 3. Run Migrations
