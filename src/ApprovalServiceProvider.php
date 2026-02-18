@@ -38,7 +38,7 @@ class ApprovalServiceProvider extends ServiceProvider
 
 			$this->publishes(
 				[
-					__DIR__ . "/../lang" => $this->app->langPath("vendor/approval"),
+					__DIR__ . "/../lang" => $this->app->langPath(),
 				],
 				"approval-lang",
 			);
