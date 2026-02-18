@@ -22,6 +22,13 @@ class ApprovalServiceProvider extends ServiceProvider
 
 			$this->publishes(
 				[
+					__DIR__ . "/../database/migrations" => database_path("migrations"),
+				],
+				"approval-migrations",
+			);
+
+			$this->publishes(
+				[
 					__DIR__ . "/../config/approval.php" => config_path(
 						"approval.php",
 					),
