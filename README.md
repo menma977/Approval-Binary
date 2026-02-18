@@ -18,10 +18,10 @@ composer require menma/approval-binary
 
 ### 2. Publish
 
-#### 2.1 migration
+#### 2.1 migrations
 
 ```bash
-php artisan vendor:publish --tag=approval-migration
+php artisan vendor:publish --tag=approval-migrations
 ```
 
 #### 2.2 config
