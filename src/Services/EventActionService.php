@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -265,7 +267,7 @@ class EventActionService
 			$approvalEventComponent->approved_at = null;
 			$approvalEventComponent->save();
 
-			$approvalEvent->status = ApprovalStatusEnum::REJECTED;
+			$approvalEvent->status = ApprovalStatusEnum::CANCELED;
 			$approvalEvent->step &= ~$approvalEventComponent->step;
 			$approvalEvent->cancelled_at = $this->now;
 			$approvalEvent->save();
@@ -297,14 +299,48 @@ class EventActionService
 		return DB::transaction(function () use ($model, $conditionResolver) {
 			$approvalEvent = $this->storeService->store($model);
 
-			$approvalComponent = ApprovalComponent::where('approval_id', $approvalEvent->approval_id)->get();
-			$approvalComponent = $conditionResolver->resolve($model, $approvalComponent, $approvalEvent->approval_id);
+			$approvalComponents = ApprovalComponent::with('contributors')
+				->where('approval_id', $approvalEvent->approval_id)
+				->get();
+			$approvalComponents = $conditionResolver->resolve($model, $approvalComponents, $approvalEvent->approval_id);
 
 			$binary = 0;
+			$allowedTypes = config('approval.group', []);
+			$userModel = config('approval.user');
 
-			foreach ($approvalComponent as $component) {
+			$approvableIdsByType = [];
+			foreach ($approvalComponents as $component) {
+				foreach ($component->contributors as $contributor) {
+					if (in_array($contributor->approvable_type, $allowedTypes, true)) {
+						$approvableIdsByType[$contributor->approvable_type][] = $contributor->approvable_id;
+					}
+				}
+			}
+
+			$approvables = [];
+			$userIds = [];
+
+			foreach ($approvableIdsByType as $approvableType => $approvableIds) {
+				/** @var Model $approvableModel */
+				$approvableModel = app($approvableType);
+				$entities = $approvableModel->whereIn($approvableModel->getKeyName(), array_unique($approvableIds))->get();
+
+				foreach ($entities as $entity) {
+					$approvables[$approvableType][$entity->getKey()] = $entity;
+					if ($entity instanceof ApprovalContributorInterface) {
+						foreach ($entity->getApproverIds() as $userId) {
+							$userIds[] = $userId;
+						}
+					}
+				}
+			}
+
+			$users = $userModel::whereIn('id', array_unique($userIds))->get()->keyBy('id');
+
+			foreach ($approvalComponents as $component) {
 				$binary |= 1 << $component->step;
 
+				/** @var ApprovalEventComponent $approvalEventComponent */
 				$approvalEventComponent = ApprovalEventComponent::updateOrCreate([
 					'approval_event_id' => $approvalEvent->id,
 					'step' => 0 | 1 << $component->step,
@@ -318,42 +354,49 @@ class EventActionService
 					'rollback_at' => $this->now,
 				]);
 
-				$collectorUser = collect();
-				$approvalContributor = ApprovalContributor::where('approval_component_id', $component->id)->get();
-				$allowedTypes = config('approval.group', []);
-				$userModel = config('approval.user');
+				$existingContributorUserIds = ApprovalEventContributor::where('approval_event_component_id', $approvalEventComponent->id)
+					->pluck('user_id')
+					->flip()
+					->toArray();
 
-				foreach ($approvalContributor as $contributor) {
-					$type = $contributor->approvable_type;
+				$collectorUserIds = collect();
 
-					if (in_array($type, $allowedTypes)) {
-						$approvableEntity = $type::find($contributor->approvable_id);
+				foreach ($component->contributors as $contributor) {
+					$approvableType = $contributor->approvable_type;
+
+					if (in_array($approvableType, $allowedTypes, true)) {
+						$approvableEntity = $approvables[$approvableType][$contributor->approvable_id] ?? null;
 
 						if ($approvableEntity instanceof ApprovalContributorInterface) {
 							foreach ($approvableEntity->getApproverIds() as $userId) {
-								$foundUser = $userModel::find($userId);
+								$foundUser = $users->get($userId);
 								if ($foundUser) {
-									$this->storeService->setEventContributor($approvalEventComponent, $foundUser);
-									$collectorUser->push($foundUser->id);
+									if (!isset($existingContributorUserIds[$foundUser->id])) {
+										$newContributor = new ApprovalEventContributor;
+										$newContributor->approval_event_component_id = $approvalEventComponent->id;
+										$newContributor->user_id = $foundUser->id;
+										$newContributor->save();
+										$existingContributorUserIds[$foundUser->id] = true;
+									}
+									$collectorUserIds->push($foundUser->id);
 								}
 							}
 						}
 					} else {
-						$existingContributor = ApprovalEventContributor::where('approval_event_component_id', $approvalEventComponent->id)
-							->where('user_id', $contributor->approvable_id)
-							->first();
-						if (!$existingContributor) {
-							$existingContributor = new ApprovalEventContributor;
-							$existingContributor->approval_event_component_id = $approvalEventComponent->id;
-							$existingContributor->user_id = (int)$contributor->approvable_id;
-							$existingContributor->save();
+						$userId = (int)$contributor->approvable_id;
+						if (!isset($existingContributorUserIds[$userId])) {
+							$newContributor = new ApprovalEventContributor;
+							$newContributor->approval_event_component_id = $approvalEventComponent->id;
+							$newContributor->user_id = $userId;
+							$newContributor->save();
+							$existingContributorUserIds[$userId] = true;
 						}
-						$collectorUser->push($contributor->approvable_id);
+						$collectorUserIds->push($userId);
 					}
 				}
 
 				ApprovalEventContributor::where('approval_event_component_id', $approvalEventComponent->id)
-					->whereNotIn('user_id', $collectorUser)
+					->whereNotIn('user_id', $collectorUserIds)
 					->delete();
 			}
 
@@ -388,23 +431,80 @@ class EventActionService
 		return DB::transaction(function () use ($model, $binary, $status) {
 			$approvalEvent = $this->storeService->store($model);
 
-			$binaryValue = $binary ?? $approvalEvent->target;
+			$forcedBinaryValue = $binary ?? 0;
+			$defaultForcedStatus = $forcedBinaryValue === 0
+				? ApprovalStatusEnum::DRAFT
+				: ApprovalStatusEnum::APPROVED;
+			$forcedApprovalStatus = ApprovalStatusEnum::from($status ?? $defaultForcedStatus->value);
 
-			$approvalEvent->step |= $binaryValue;
-			$approvalEvent->status = ApprovalStatusEnum::from($status ?? ApprovalStatusEnum::APPROVED->value);
-			if ($approvalEvent->step === $approvalEvent->target) {
-				$approvalEvent->approved_at = $this->now;
-				$approvalEvent->components()->update([
+			$approvalEvent->status = $forcedApprovalStatus;
+			$this->resetApprovalEventTimestamps($approvalEvent);
+			$this->resetApprovalEventComponentTimestamps($approvalEvent);
+
+			if ($forcedApprovalStatus === ApprovalStatusEnum::APPROVED) {
+				$approvalEvent->step |= $forcedBinaryValue;
+
+				if (($approvalEvent->step & $approvalEvent->target) === $approvalEvent->target) {
+					$approvalEvent->approved_at = $this->now;
+					$approvalEvent->components()->update([
+						'approved_at' => $this->now,
+						'rejected_at' => null,
+						'cancelled_at' => null,
+						'rollback_at' => null,
+					]);
+				}
+
+				$forcedComponentQuery = $approvalEvent->components()->orderBy('step');
+				app(BitmaskQueryService::class)->whereMaskFullyInside($forcedComponentQuery, 'step', $forcedBinaryValue);
+				$forcedApprovalEventComponentIds = $forcedComponentQuery->pluck('id');
+
+				ApprovalEventComponent::whereKey($forcedApprovalEventComponentIds)->update([
 					'approved_at' => $this->now,
+					'rejected_at' => null,
+					'cancelled_at' => null,
+					'rollback_at' => null,
 				]);
+			} elseif ($forcedApprovalStatus === ApprovalStatusEnum::REJECTED) {
+				$approvalEvent->rejected_at = $this->now;
+			} elseif ($forcedApprovalStatus === ApprovalStatusEnum::CANCELED) {
+				$approvalEvent->cancelled_at = $this->now;
+			} elseif ($forcedApprovalStatus === ApprovalStatusEnum::ROLLBACK) {
+				$approvalEvent->rollback_at = $this->now;
+			} else {
+				$approvalEvent->step = 0;
 			}
-
-			$approvalEvent->components()->whereRaw('(step & ?) = step', [$binaryValue])->orderBy('step')->update(['approved_at' => $this->now]);
 
 			$approvalEvent->save();
 
 			return $approvalEvent;
 		});
+	}
+
+	private function resetApprovalEventTimestamps(ApprovalEvent $approvalEvent): void
+	{
+		$approvalEvent->approved_at = null;
+		$approvalEvent->rejected_at = null;
+		$approvalEvent->cancelled_at = null;
+		$approvalEvent->rollback_at = null;
+	}
+
+	private function resetApprovalEventComponentTimestamps(ApprovalEvent $approvalEvent): void
+	{
+		$approvalEventComponentIds = $approvalEvent->components()->pluck('id');
+
+		$approvalEvent->components()->update([
+			'approved_at' => null,
+			'rejected_at' => null,
+			'cancelled_at' => null,
+			'rollback_at' => null,
+		]);
+
+		ApprovalEventContributor::whereIn('approval_event_component_id', $approvalEventComponentIds)->update([
+			'approved_at' => null,
+			'rejected_at' => null,
+			'cancelled_at' => null,
+			'rollback_at' => null,
+		]);
 	}
 
 	/**
@@ -425,12 +525,14 @@ class EventActionService
 	private function getFirstEventComponent(ApprovalEvent $approvalEvent, ?int $binary = null, ?Authenticatable $user = null): ?ApprovalEventComponent
 	{
 		if ($binary !== null) {
-			return ApprovalEventComponent::where('approval_event_id', $approvalEvent->id)
+			$approvalEventComponentQuery = ApprovalEventComponent::where('approval_event_id', $approvalEvent->id)
 				->whereNull('approved_at')
-				->whereRaw('(step & ?) = ?', [$binary, $binary])
 				->orderBy('step')
-				->lockForUpdate()
-				->first();
+				->lockForUpdate();
+
+			app(BitmaskQueryService::class)->whereMaskContains($approvalEventComponentQuery, 'step', $binary);
+
+			return $approvalEventComponentQuery->first();
 		}
 
 		/**

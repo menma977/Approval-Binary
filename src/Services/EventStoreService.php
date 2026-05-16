@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -128,10 +130,10 @@ class EventStoreService
 					$componentHasContributor = false;
 
 					foreach ($approvalContributor as $contributor) {
-						$type = $contributor->approvable_type;
+						$approvableType = $contributor->approvable_type;
 
-						if (in_array($type, $this->allowedTypes)) {
-							$approvableEntity = $type::find($contributor->approvable_id);
+						if (in_array($approvableType, $this->allowedTypes, true)) {
+							$approvableEntity = $approvableType::find($contributor->approvable_id);
 
 							if ($approvableEntity instanceof ApprovalContributorInterface) {
 								foreach ($approvableEntity->getApproverIds() as $userId) {

@@ -46,6 +46,8 @@ return new class extends Migration {
 			$table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
 			$table->timestamps();
 			$table->softDeletes();
+			$table->index(['approval_event_id', 'step']);
+			$table->index(['approval_event_id', 'approved_at']);
 		});
 	}
 

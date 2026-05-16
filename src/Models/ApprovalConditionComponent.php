@@ -22,72 +22,80 @@ declare(strict_types=1);
 namespace Menma\Approval\Models;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Menma\Approval\Abstracts\ApprovalCoreAbstract;
 
 /**
- * @property string $id
- * @property string $name
+ * @property int $id
+ * @property string $ulid
+ * @property int $approval_condition_id
+ * @property int $approval_component_id
+ * @property array<string, mixed>|null $expression
  * @property int|null $created_by
  * @property int|null $updated_by
  * @property int|null $deleted_by
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
- * @property-read \Menma\Approval\Models\Approval|null $approval
- * @property-read \Menma\Approval\Models\ApprovalFlowComponent[] $components
- * @property-read int|null $components_count
+ * @property-read \Menma\Approval\Models\ApprovalCondition $condition
+ * @property-read \Menma\Approval\Models\ApprovalComponent $component
  * @property-read \Illuminate\Database\Eloquent\Model|null $createdBy
  * @property-read \Illuminate\Database\Eloquent\Model|null $deletedBy
  * @property-read \Illuminate\Database\Eloquent\Model|null $updatedBy
  *
- * @method static Builder<static>|ApprovalFlow newModelQuery()
- * @method static Builder<static>|ApprovalFlow newQuery()
- * @method static Builder<static>|ApprovalFlow onlyTrashed()
- * @method static Builder<static>|ApprovalFlow query()
- * @method static Builder<static>|ApprovalFlow whereCreatedAt($value)
- * @method static Builder<static>|ApprovalFlow whereCreatedBy($value)
- * @method static Builder<static>|ApprovalFlow whereDeletedAt($value)
- * @method static Builder<static>|ApprovalFlow whereDeletedBy($value)
- * @method static Builder<static>|ApprovalFlow whereId($value)
- * @method static Builder<static>|ApprovalFlow whereName($value)
- * @method static Builder<static>|ApprovalFlow whereUpdatedAt($value)
- * @method static Builder<static>|ApprovalFlow whereUpdatedBy($value)
- * @method static Builder<static>|ApprovalFlow withTrashed(bool $withTrashed = true)
- * @method static Builder<static>|ApprovalFlow withUsers()
- * @method static Builder<static>|ApprovalFlow withoutTrashed()
+ * @method static Builder<static>|ApprovalConditionComponent newModelQuery()
+ * @method static Builder<static>|ApprovalConditionComponent newQuery()
+ * @method static Builder<static>|ApprovalConditionComponent onlyTrashed()
+ * @method static Builder<static>|ApprovalConditionComponent query()
+ * @method static Builder<static>|ApprovalConditionComponent whereApprovalComponentId($value)
+ * @method static Builder<static>|ApprovalConditionComponent whereApprovalConditionId($value)
+ * @method static Builder<static>|ApprovalConditionComponent withTrashed(bool $withTrashed = true)
+ * @method static Builder<static>|ApprovalConditionComponent withoutTrashed()
  */
-class ApprovalFlow extends ApprovalCoreAbstract
+class ApprovalConditionComponent extends ApprovalCoreAbstract
 {
 	/**
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		'name',
+		'approval_condition_id',
+		'approval_component_id',
+		'expression',
 		'created_by',
 		'updated_by',
 		'deleted_by',
 	];
 
+	protected $casts = [
+		'expression' => 'array',
+	];
+
 	/**
-	 * Get the approval associated with this flow.
-	 *
-	 * @return HasOne<Approval, $this>
+	 * @return array<int, string>
 	 */
-	public function approval(): HasOne
+	public function uniqueIds(): array
 	{
-		return $this->hasOne(Approval::class);
+		return ['ulid'];
 	}
 
 	/**
-	 * Get the components associated with this flow.
+	 * Get the condition associated with this rule.
 	 *
-	 * @return HasMany<ApprovalFlowComponent, $this>
+	 * @return BelongsTo<ApprovalCondition, $this>
 	 */
-	public function components(): HasMany
+	public function condition(): BelongsTo
 	{
-		return $this->hasMany(ApprovalFlowComponent::class);
+		return $this->belongsTo(ApprovalCondition::class, 'approval_condition_id');
+	}
+
+	/**
+	 * Get the approval component selected by this rule.
+	 *
+	 * @return BelongsTo<ApprovalComponent, $this>
+	 */
+	public function component(): BelongsTo
+	{
+		return $this->belongsTo(ApprovalComponent::class, 'approval_component_id');
 	}
 }

@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -31,10 +33,10 @@ use Illuminate\Support\Facades\Auth;
 use Menma\Approval\Abstracts\ApprovalCoreAbstract;
 use Menma\Approval\Enums\ApprovalStatusEnum;
 use Menma\Approval\Enums\ApprovalTypeEnum;
+use Menma\Approval\Services\BitmaskQueryService;
 
 /**
  * @property string $id
- * @property int|null $company_id
  * @property int|null $approval_id
  * @property int $step The step using binary system: 0, 1, 3, 7, etc.
  * @property int $target The target of a binary system: 1, 2, 4, 8, etc.
@@ -76,7 +78,6 @@ use Menma\Approval\Enums\ApprovalTypeEnum;
  * @method static Builder<static>|ApprovalEvent whereApprovalId($value)
  * @method static Builder<static>|ApprovalEvent whereApprovedAt($value)
  * @method static Builder<static>|ApprovalEvent whereCancelledAt($value)
- * @method static Builder<static>|ApprovalEvent whereCompanyId($value)
  * @method static Builder<static>|ApprovalEvent whereCreatedAt($value)
  * @method static Builder<static>|ApprovalEvent whereCreatedBy($value)
  * @method static Builder<static>|ApprovalEvent whereDeletedAt($value)
@@ -112,7 +113,6 @@ class ApprovalEvent extends ApprovalCoreAbstract
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		'company_id',
 		'approval_id',
 		'step',
 		'target',
@@ -258,16 +258,16 @@ class ApprovalEvent extends ApprovalCoreAbstract
 				return false;
 			}
 
-			if ($this->components()->whereRaw('(step & ?) = 0', [$attributes['step']])->orderBy('step')->count() <= 0) {
+			$approvalEventComponent = $this->nextPendingComponent((int)$attributes['step']);
+			if (!$approvalEventComponent) {
 				return false;
 			}
 
-			$component = $this->components()->whereRaw('(step & ?) = 0', [$attributes['step']])->orderBy('step')->first();
-			if ($component && ($component->is_approved || $component->is_cancelled || $component->is_rejected)) {
+			if ($approvalEventComponent->is_approved || $approvalEventComponent->is_cancelled || $approvalEventComponent->is_rejected) {
 				return false;
 			}
 
-			$contributors = $component->contributors ?? collect();
+			$contributors = $approvalEventComponent->contributors ?? collect();
 			if ($contributors->isEmpty()) {
 				return true;
 			}
@@ -291,7 +291,7 @@ class ApprovalEvent extends ApprovalCoreAbstract
 	protected function component(): Attribute
 	{
 		return Attribute::get(function (mixed $value, array $attributes) {
-			return $this->components()->whereRaw('(step & ?) = 0', [$attributes['step']])->orderBy('step')->first() ?? null;
+			return $this->nextPendingComponent((int)$attributes['step']);
 		});
 	}
 
@@ -307,7 +307,37 @@ class ApprovalEvent extends ApprovalCoreAbstract
 	protected function currentComponent(): Attribute
 	{
 		return Attribute::get(function (mixed $value, array $attributes) {
-			return $this->components()->whereRaw('(step & ~?) = 0', [$attributes['step']])->latest('id')->first() ?? null;
+			return $this->latestCompletedComponent((int)$attributes['step']);
 		});
+	}
+
+	private function nextPendingComponent(int $completedStepMask): ?ApprovalEventComponent
+	{
+		if ($this->relationLoaded('components')) {
+			return $this->components
+				->sortBy('step')
+				->first(fn(ApprovalEventComponent $component): bool => ($component->step & $completedStepMask) === 0);
+		}
+
+		$componentQuery = $this->components()->orderBy('step');
+
+		app(BitmaskQueryService::class)->whereMaskHasNoOverlap($componentQuery, 'step', $completedStepMask);
+
+		return $componentQuery->first();
+	}
+
+	private function latestCompletedComponent(int $completedStepMask): ?ApprovalEventComponent
+	{
+		if ($this->relationLoaded('components')) {
+			return $this->components
+				->sortByDesc('step')
+				->first(fn(ApprovalEventComponent $component): bool => ($component->step & $completedStepMask) === $component->step);
+		}
+
+		$componentQuery = $this->components()->orderByDesc('step');
+
+		app(BitmaskQueryService::class)->whereMaskFullyInside($componentQuery, 'step', $completedStepMask);
+
+		return $componentQuery->first();
 	}
 }

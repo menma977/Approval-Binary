@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -27,7 +29,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
 
 /**
  * @property string $id
- * @property int|null $company_id
  * @property string $approval_event_component_id
  * @property int $user_id
  * @property Carbon|null $approved_at
@@ -57,7 +58,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
  * @method static Builder<static>|ApprovalEventContributor whereApprovalEventComponentId($value)
  * @method static Builder<static>|ApprovalEventContributor whereApprovedAt($value)
  * @method static Builder<static>|ApprovalEventContributor whereCancelledAt($value)
- * @method static Builder<static>|ApprovalEventContributor whereCompanyId($value)
  * @method static Builder<static>|ApprovalEventContributor whereCreatedAt($value)
  * @method static Builder<static>|ApprovalEventContributor whereCreatedBy($value)
  * @method static Builder<static>|ApprovalEventContributor whereDeletedAt($value)
@@ -85,7 +85,6 @@ class ApprovalEventContributor extends ApprovalCoreAbstract
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		'company_id',
 		'approval_event_component_id',
 		'user_id',
 		'approved_at',

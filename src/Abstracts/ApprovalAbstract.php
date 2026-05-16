@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -82,8 +84,11 @@ abstract class ApprovalAbstract extends Model implements ApprovalContributorInte
 	public function force(Model $user, ?int $binary = null, ?string $status = null): void
 	{
 		$service = $this->approvalService()
-			->user($user->id)
-			->binary($binary ?? 0);
+			->user($user->id);
+
+		if ($binary !== null) {
+			$service->binary($binary);
+		}
 
 		if ($status !== null) {
 			$service->status($status);

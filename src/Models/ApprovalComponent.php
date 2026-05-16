@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -28,7 +30,6 @@ use Menma\Approval\Enums\ContributorTypeEnum;
 
 /**
  * @property int $id
- * @property int|null $company_id
  * @property string $ulid
  * @property int $approval_id
  * @property string $name
@@ -60,7 +61,6 @@ use Menma\Approval\Enums\ContributorTypeEnum;
  * @method static Builder<static>|ApprovalComponent whereCanDrag($value)
  * @method static Builder<static>|ApprovalComponent whereCanEdit($value)
  * @method static Builder<static>|ApprovalComponent whereColor($value)
- * @method static Builder<static>|ApprovalComponent whereCompanyId($value)
  * @method static Builder<static>|ApprovalComponent whereCreatedAt($value)
  * @method static Builder<static>|ApprovalComponent whereCreatedBy($value)
  * @method static Builder<static>|ApprovalComponent whereDeletedAt($value)
@@ -82,7 +82,6 @@ class ApprovalComponent extends ApprovalCoreAbstract
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		'company_id',
 		'approval_id',
 		'name',
 		'step',
@@ -112,6 +111,20 @@ class ApprovalComponent extends ApprovalCoreAbstract
 		return ['ulid'];
 	}
 
+	protected static function boot(): void
+	{
+		parent::boot();
+
+		static::created(function (ApprovalComponent $component): void {
+			$defaultCondition = $component->approval->ensureDefaultCondition();
+
+			ApprovalConditionComponent::firstOrCreate([
+				'approval_condition_id' => $defaultCondition->id,
+				'approval_component_id' => $component->id,
+			]);
+		});
+	}
+
 	/**
 	 * Get the approval associated with this component.
 	 *
@@ -130,5 +143,15 @@ class ApprovalComponent extends ApprovalCoreAbstract
 	public function contributors(): HasMany
 	{
 		return $this->hasMany(ApprovalContributor::class);
+	}
+
+	/**
+	 * Get condition links associated with this component.
+	 *
+	 * @return HasMany<ApprovalConditionComponent, $this>
+	 */
+	public function conditionComponents(): HasMany
+	{
+		return $this->hasMany(ApprovalConditionComponent::class);
 	}
 }

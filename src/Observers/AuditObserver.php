@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -21,6 +23,7 @@ namespace Menma\Approval\Observers;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class AuditObserver
 {
@@ -31,9 +34,7 @@ class AuditObserver
 	 */
 	public function creating(Model $model): void
 	{
-		if (property_exists($model, 'created_by') && !$model->created_by) {
-			$model->created_by = Auth::id();
-		}
+		$this->setAuditColumnIfEmpty($model, 'created_by');
 	}
 
 	/**
@@ -46,8 +47,7 @@ class AuditObserver
 	 */
 	public function created(Model $model): void
 	{
-		if (property_exists($model, 'created_by') && !$model->created_by) {
-			$model->created_by = Auth::id();
+		if ($this->setAuditColumnIfEmpty($model, 'created_by')) {
 			$model->saveQuietly();
 		}
 	}
@@ -59,9 +59,7 @@ class AuditObserver
 	 */
 	public function updating(Model $model): void
 	{
-		if (property_exists($model, 'updated_by') && !$model->updated_by) {
-			$model->updated_by = Auth::id();
-		}
+		$this->setAuditColumnIfEmpty($model, 'updated_by');
 	}
 
 	/**
@@ -71,8 +69,7 @@ class AuditObserver
 	 */
 	public function updated(Model $model): void
 	{
-		if (property_exists($model, 'updated_by') && !$model->updated_by) {
-			$model->updated_by = Auth::id();
+		if ($this->setAuditColumnIfEmpty($model, 'updated_by')) {
 			$model->saveQuietly();
 		}
 	}
@@ -85,9 +82,35 @@ class AuditObserver
 	 */
 	public function deleted(Model $model): void
 	{
-		if (property_exists($model, 'deleted_by') && !$model->deleted_by) {
-			$model->deleted_by = Auth::id();
+		if ($this->setAuditColumnIfEmpty($model, 'deleted_by')) {
 			$model->saveQuietly();
 		}
+	}
+
+	private function setAuditColumnIfEmpty(Model $model, string $auditColumn): bool
+	{
+		$authenticatedUserId = Auth::id();
+
+		if (!$authenticatedUserId || !$this->modelSupportsAuditColumn($model, $auditColumn) || $model->getAttribute($auditColumn)) {
+			return false;
+		}
+
+		$model->setAttribute($auditColumn, $authenticatedUserId);
+
+		return true;
+	}
+
+	private function modelSupportsAuditColumn(Model $model, string $auditColumn): bool
+	{
+		$modelCanReceiveAuditColumn = $model->isFillable($auditColumn)
+			|| array_key_exists($auditColumn, $model->getAttributes());
+
+		if (!$modelCanReceiveAuditColumn) {
+			return false;
+		}
+
+		$modelTableName = $model->getTable();
+
+		return Schema::hasColumn($modelTableName, $auditColumn);
 	}
 }

@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -163,8 +165,8 @@ class BinaryService implements ApprovalServiceInterface
 			->when($this->status, function ($query) {
 				return $query->where('status', $this->status);
 			})->when($this->binary !== null, function ($query) {
-				return $query->whereHas('components', function ($q) {
-					$q->whereRaw('(step & ?) = ?', [$this->binary, $this->binary]);
+				return $query->whereHas('components', function ($componentQuery) {
+					app(BitmaskQueryService::class)->whereMaskContains($componentQuery, 'step', $this->binary);
 				});
 			})
 			->first();

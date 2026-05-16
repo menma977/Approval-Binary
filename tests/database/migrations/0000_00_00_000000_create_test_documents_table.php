@@ -10,6 +10,8 @@ return new class extends Migration {
 		Schema::create('test_documents', function (Blueprint $table) {
 			$table->id();
 			$table->string('name');
+			$table->string('position')->nullable();
+			$table->integer('amount')->nullable();
 			$table->unsignedBigInteger('created_by')->nullable();
 			$table->unsignedBigInteger('updated_by')->nullable();
 			$table->unsignedBigInteger('deleted_by')->nullable();

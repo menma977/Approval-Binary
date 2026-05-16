@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -28,7 +30,6 @@ use Menma\Approval\Enums\ApprovalTypeEnum;
 
 /**
  * @property int $id
- * @property int|null $company_id
  * @property string $ulid
  * @property string $approval_flow_id
  * @property string $name
@@ -55,7 +56,6 @@ use Menma\Approval\Enums\ApprovalTypeEnum;
  * @method static Builder<static>|Approval query()
  * @method static Builder<static>|Approval whereApprovalFlowId($value)
  * @method static Builder<static>|Approval whereCanChange($value)
- * @method static Builder<static>|Approval whereCompanyId($value)
  * @method static Builder<static>|Approval whereCreatedAt($value)
  * @method static Builder<static>|Approval whereCreatedBy($value)
  * @method static Builder<static>|Approval whereDeletedAt($value)
@@ -76,7 +76,6 @@ class Approval extends ApprovalCoreAbstract
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		"company_id",
 		"approval_flow_id",
 		"name",
 		"type",
@@ -97,6 +96,15 @@ class Approval extends ApprovalCoreAbstract
 	public function uniqueIds(): array
 	{
 		return ["ulid"];
+	}
+
+	protected static function boot(): void
+	{
+		parent::boot();
+
+		static::created(function (Approval $approval): void {
+			$approval->ensureDefaultCondition();
+		});
 	}
 
 	/**
@@ -138,5 +146,13 @@ class Approval extends ApprovalCoreAbstract
 	public function conditions(): HasMany
 	{
 		return $this->hasMany(ApprovalCondition::class);
+	}
+
+	public function ensureDefaultCondition(): ApprovalCondition
+	{
+		/** @var ApprovalCondition $condition */
+		$condition = $this->conditions()->firstOrCreate(['priority' => 0]);
+
+		return $condition;
 	}
 }
