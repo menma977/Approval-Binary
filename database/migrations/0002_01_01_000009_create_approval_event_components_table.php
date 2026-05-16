@@ -34,7 +34,7 @@ return new class extends Migration {
 			$table->ulid('id')->primary()->index();
 			$table->foreignUlid('approval_event_id')->constrained('approval_events')->cascadeOnDelete();
 			$table->string('name');
-			$table->smallInteger('step')->default(1)->comment('The step using binary 1 -> 10 -> 100 -> 1000');
+			$table->bigInteger('step')->default(1)->comment('Component approval bitmask: 1, 2, 4, 8, etc.');
 			$table->integer('type')->default(ContributorTypeEnum::OR->value)->comment('The type of approval logic (0:and/1:or)');
 			$table->string('color')->default('#000000');
 			$table->timestamp('approved_at')->nullable();

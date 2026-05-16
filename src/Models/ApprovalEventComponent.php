@@ -33,7 +33,7 @@ use Menma\Approval\Enums\ContributorTypeEnum;
  * @property string $id
  * @property string $approval_event_id
  * @property string $name
- * @property int $step The step using binary 1 -> 10 -> 100 -> 1000
+ * @property int $step Component approval bitmask: 1, 2, 4, 8, etc.
  * @property ContributorTypeEnum $type The type of approval logic (0:and/1:or)
  * @property string $color
  * @property Carbon|null $approved_at

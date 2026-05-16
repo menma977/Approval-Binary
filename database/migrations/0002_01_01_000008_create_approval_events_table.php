@@ -34,8 +34,8 @@ return new class extends Migration {
 		Schema::create('approval_events', function (Blueprint $table) {
 			$table->ulid('id')->primary()->index();
 			$table->foreignId('approval_id')->nullable()->constrained('approvals')->cascadeOnDelete();
-			$table->integer('step')->default(0)->comment('The step using binary system: 0, 1, 3, 7, etc.');
-			$table->integer('target')->default(0)->comment('The target of a binary system: 1, 2, 4, 8, etc.');
+			$table->bigInteger('step')->default(0)->comment('Completed approval bitmask: 0, 1, 3, 7, etc.');
+			$table->bigInteger('target')->default(0)->comment('Required approval bitmask: 1, 2, 4, 8, etc.');
 			$table->string('requestable_type')->index();
 			$table->string('requestable_id')->index();
 			$table->integer('type')->default(ApprovalTypeEnum::PARALLEL->value)->comment('The type of workflow (0: parallel or 1: sequential)');

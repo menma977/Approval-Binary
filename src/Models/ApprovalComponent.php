@@ -33,7 +33,7 @@ use Menma\Approval\Enums\ContributorTypeEnum;
  * @property string $ulid
  * @property int $approval_id
  * @property string $name
- * @property int $step The step using binary system: 1, 2, 3, 4, etc.
+ * @property int $step Component bit position: 0, 1, 2, 3, etc.
  * @property ContributorTypeEnum $type The type of approval logic (0:and/1:or)
  * @property string $color The color of the component
  * @property bool $can_drag

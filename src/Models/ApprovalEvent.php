@@ -38,8 +38,8 @@ use Menma\Approval\Services\BitmaskQueryService;
 /**
  * @property string $id
  * @property int|null $approval_id
- * @property int $step The step using binary system: 0, 1, 3, 7, etc.
- * @property int $target The target of a binary system: 1, 2, 4, 8, etc.
+ * @property int $step Completed approval bitmask: 0, 1, 3, 7, etc.
+ * @property int $target Required approval bitmask: 1, 2, 4, 8, etc.
  * @property string $requestable_type
  * @property string $requestable_id
  * @property ApprovalTypeEnum $type The type of workflow (0: parallel or 1: sequential)
@@ -130,6 +130,8 @@ class ApprovalEvent extends ApprovalCoreAbstract
 	];
 
 	protected $casts = [
+		'step' => 'integer',
+		'target' => 'integer',
 		'type' => ApprovalTypeEnum::class,
 		'status' => ApprovalStatusEnum::class,
 		'approved_at' => 'datetime',

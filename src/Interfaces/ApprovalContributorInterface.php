@@ -22,15 +22,33 @@ declare(strict_types=1);
 namespace Menma\Approval\Interfaces;
 
 /**
- * Interface for models that can provide approval contributors.
+ * Interface for models that can resolve approval contributors into user IDs.
  *
- * Implement this interface on models that should be usable as approval contributors.
- * The system will automatically resolve the model to get actual user IDs.
+ * Implement this interface on models that should be usable as dynamic
+ * approval contributor sources. The model class must also be registered in
+ * config('approval.group'); otherwise ApprovalContributor approvable_id is
+ * treated as a direct user ID.
+ *
+ * Runtime resolution:
+ * - If approvable_type is registered in config('approval.group'), the engine
+ *   loads that model and calls getApproverIds().
+ * - If approvable_type is not registered, approvable_id is cast to int and
+ *   used directly as the user ID.
  *
  * Example Usage in ApprovalContributor:
+ * - approvable_type = User::class, approvable_id = 1 (Direct user ID, when User::class is not registered)
  * - approvable_type = Role::class, approvable_id = 5 (Role with ID 5)
  * - approvable_type = Department::class, approvable_id = 10 (Department with ID 10)
  * - approvable_type = ApprovalGroup::class, approvable_id = 3 (Group with ID 3)
+ *
+ * Dynamic contributor classes must be registered:
+ *
+ * config/approval.php
+ * 'group' => [
+ *     ApprovalGroup::class,
+ *     Role::class,
+ *     Department::class,
+ * ]
  *
  * Two implementation approaches:
  *
@@ -43,7 +61,7 @@ namespace Menma\Approval\Interfaces;
  * 2. Query from relationship (recommended):
  *    public function getApproverIds(): array
  *    {
- *        return $this->users()->pluck('id')->toArray();
+ *        return $this->users()->pluck('users.id')->toArray();
  *    }
  *
  * Example implementations:
@@ -96,8 +114,8 @@ interface ApprovalContributorInterface
 	 * Get the list of user IDs that should be added as contributors.
 	 *
 	 * This method should return an array of user IDs that will be added as
-	 * approval contributors. The implementation can query relationships,
-	 * filter users, or return a static list.
+	 * runtime ApprovalEventContributor records. The implementation can query
+	 * relationships, filter users, or return a static list.
 	 *
 	 * @return array<int> Array of user IDs
 	 */

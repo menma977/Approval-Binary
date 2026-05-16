@@ -1,281 +1,545 @@
 # Approval Binary
 
-A Laravel plugin for **binary bitmask-based approval workflows**. Define multi-level approval chains where each step is represented as a bit position, enabling efficient state tracking, flexible
-workflow automation, and high-performance querying.
+Approval Binary is a Laravel package for building approval workflow engines with binary/bitmask state tracking.
+
+It is not a CRUD approval scaffold and it does not ship a UI builder. The package focuses on reusable workflow orchestration: define approval blueprints in database records, resolve contributors at runtime, clone the selected blueprint into an execution event, and track approval progress with bitwise masks.
+
+## Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Why Binary Approval](#why-binary-approval)
+- [Architecture](#architecture)
+- [Runtime Lifecycle](#runtime-lifecycle)
+- [Dynamic Contributors](#dynamic-contributors)
+- [Condition Routing](#condition-routing)
+- [Using the Package](#using-the-package)
+- [Workflow Behavior](#workflow-behavior)
+- [Use Cases](#use-cases)
+- [Technical Philosophy](#technical-philosophy)
 
 ## Requirements
 
 - PHP 8.1+
-- Laravel 10.x / 11.x / 12.x
+- Laravel 10.x / 11.x / 12.x / 13.x
 
 ## Installation
-
-### 1. Install via Composer
 
 ```bash
 composer require menma/approval-binary
 ```
 
-### 2. Publish
-
-#### 2.1 migrations
+Publish package assets:
 
 ```bash
 php artisan vendor:publish --tag=approval-migrations
-```
-
-#### 2.2 config
-
-```bash
 php artisan vendor:publish --tag=approval-config
-```
-
-#### 2.3 lang
-
-```bash
 php artisan vendor:publish --tag=approval-lang
 ```
 
-### 3. Run Migrations
+Run migrations:
 
 ```bash
 php artisan migrate
 ```
 
-## Core Concepts
+## Why Binary Approval
 
-### Binary Bitmask System
+Approval Binary uses bitwise state representation, inspired by the same idea behind Linux permission masks. Instead of storing approval progress only as rows or a single status string, each workflow component contributes one bit to a bigint approval mask.
 
-Each approval step is assigned a unique bit position. The `target` integer stores the required set of approvals (mask), and `step` integer tracks the completed approvals.
+Example:
 
-| Component | Step | Bit Position | Mask Value       |
-|-----------|------|--------------|------------------|
-| HR        | 0    | Bit 0        | `1 << 0` = **1** |
-| Manager   | 1    | Bit 1        | `1 << 1` = **2** |
-| Director  | 2    | Bit 2        | `1 << 2` = **4** |
+| Approval component | Component position | Runtime mask value |
+|--------------------|--------------------|--------------------|
+| HR                 | `0`                | `1 << 0` = `1`     |
+| Manager            | `1`                | `1 << 1` = `2`     |
+| Finance            | `2`                | `1 << 2` = `4`     |
+| Director           | `3`                | `1 << 3` = `8`     |
 
-- **Target = 7** (binary `111`) → HR + Manager + Director required.
-- **Target = 3** (binary `011`) → HR + Manager required.
+The runtime event stores two masks:
 
-### Architecture
+- `target`: all approval bits required for this event.
+- `step`: approval bits already completed.
 
-The plugin is architected around specialized services for robust workflow management:
+If HR and Manager are required, `target = 3` (`0011`). If only HR has approved, `step = 1` (`0001`). When `(step & target) === target`, the event is approved.
 
-- **EventStoreService**: Handles the creation, retrieval, and initialization of `ApprovalEvent`s. Determines the correct flow and assigns contributors.
-- **EventActionService**: Orchestrates state changes (Approve, Reject, Cancel). Handles complex logic like Parallel user detection and Sequential order enforcement.
-- **ConditionResolverService**: Evaluates dynamic conditions (e.g., "Amount > 1000") to filter required steps at runtime (Dynamic Masking).
+This gives compact partial-state representation:
 
-## Usage
+```text
+target = 15  // 1111, HR + Manager + Finance + Director required
+step   =  5  // 0101, HR + Finance already approved
+```
 
-### 1. Prepare Your Model
+Because masks are stored as bigint values, a workflow can support deeper approval layers than a small integer column. The practical maximum is still bounded by PHP integer and database signed-bigint limits, so component positions should stay within that safe numeric range.
 
-Extend `ApprovalAbstract`. This provides the necessary relationships and default implementations. You can override `getApprovalConditions` to enable Dynamic Masking.
+## Architecture
+
+The package separates blueprint configuration from runtime execution.
+
+### Blueprint Structure
+
+```text
+ApprovalDictionary
+└── ApprovalFlowComponent (bridge)
+    ├── key = model morph class
+    ├── approval_dictionary_id
+    └── approval_flow_id
+
+ApprovalFlow
+└── Approval
+    ├── ApprovalComponent
+    │   └── ApprovalContributor
+    └── ApprovalCondition
+        └── ApprovalConditionComponent
+            └── ApprovalComponent
+```
+
+Core blueprint concepts:
+
+- `ApprovalDictionary` registers an approvable model class or morph key.
+- `ApprovalFlowComponent` bridges the registered model key to a flow.
+- `ApprovalFlow` groups one or more approval definitions.
+- `Approval` is the workflow blueprint/template used to generate runtime events.
+- `ApprovalComponent` is a logical approval unit, such as HR approval, manager approval, or finance approval.
+- `ApprovalContributor` defines who can approve a component, either as a direct user or a dynamic contributor source.
+- `ApprovalCondition` groups contextual routing rules.
+- `ApprovalConditionComponent` links a condition to the components selected when its expression matches.
+- `ApprovalComponent.step` is a bit position (`0, 1, 2...`), not the runtime mask value. The runtime mask is calculated with `1 << step`.
+
+### Runtime Structure
+
+```text
+ApprovalEvent
+└── ApprovalEventComponent
+    └── ApprovalEventContributor
+```
+
+Runtime concepts:
+
+- `ApprovalEvent` is the execution instance for one approvable model record.
+- `ApprovalEventComponent` is a snapshot of a selected `ApprovalComponent`.
+- `ApprovalEventContributor` is the resolved runtime user allowed to approve/reject/cancel that event component.
+
+When a workflow starts, the package does not execute the blueprint directly. It clones the selected approval structure into event tables. That makes an event stable: later blueprint or condition changes do not mutate a running approval. `rollback()` intentionally re-runs condition routing and contributor resolution from the current blueprint and current model condition data.
+
+## Runtime Lifecycle
+
+Typical runtime path:
+
+```text
+$model->initEvent($user)
+└── BinaryService::store()
+    └── EventStoreService::store()
+        ├── find model flow by morph key
+        ├── find the first approval blueprint for that flow
+        ├── resolve conditions
+        ├── clone selected components into event components
+        ├── resolve contributors into event contributors
+        └── calculate target mask
+```
+
+Action path:
+
+```text
+$model->approve($user)
+└── BinaryService::approve()
+    └── EventActionService::approve()
+        ├── find or create event
+        ├── find target event component
+        ├── validate contributor
+        ├── mark contributor/component approved
+        └── update event step/status mask
+```
+
+Supported event statuses:
+
+- `DRAFT`
+- `APPROVED`
+- `REJECTED`
+- `CANCELED`
+- `ROLLBACK`
+
+Runtime hooks are available on the approvable model:
+
+- `onApprove(ApprovalEvent $event)`
+- `onReject(ApprovalEvent $event)`
+- `onCancel(ApprovalEvent $event)`
+- `onRollback(ApprovalEvent $event)`
+- `onForce(ApprovalEvent $event)`
+
+These hooks are the intended integration point for application-side listeners, notifications, domain events, or status synchronization. The package itself uses runtime event records and audit observers; it does not ship Laravel event/listener classes for approval actions. If an application needs Laravel events, dispatch them from these hooks.
+
+## Dynamic Contributors
+
+Contributors are not hardcoded as users only.
+
+An `ApprovalContributor` stores:
+
+- `approval_component_id`
+- `approvable_type`
+- `approvable_id`
+
+At runtime, contributor resolution works like this:
+
+```text
+ApprovalContributor
+├── approvable_type is registered in config('approval.group')
+│   └── load that model and call getApproverIds()
+└── approvable_type is not registered
+    └── treat approvable_id as direct user id
+```
+
+For direct users, store the configured user model class in `approvable_type` and the user id in `approvable_id`. Because the user model class is normally not registered in `config('approval.group')`, the runtime resolver treats `approvable_id` as the concrete user id.
+
+This allows multiple contributor sources:
+
+- direct user id
+- role model
+- department model
+- position model
+- approval group
+- custom resolver model
+- any configurable source implementing `ApprovalContributorInterface`
+
+Example dynamic source:
 
 ```php
+use Illuminate\Database\Eloquent\Model;
+use Menma\Approval\Interfaces\ApprovalContributorInterface;
+
+class Department extends Model implements ApprovalContributorInterface
+{
+    public function getApproverIds(): array
+    {
+        return $this->managers()->pluck('users.id')->all();
+    }
+}
+```
+
+Register it in `config/approval.php`:
+
+```php
+'group' => [
+    Menma\Approval\Models\ApprovalGroup::class,
+    App\Models\Department::class,
+    App\Models\Position::class,
+],
+```
+
+Then use the model as an approval contributor:
+
+```php
+ApprovalContributor::create([
+    'approval_component_id' => $component->id,
+    'approvable_type' => App\Models\Department::class,
+    'approvable_id' => $department->id,
+]);
+```
+
+When the event is initialized, the department is resolved into concrete `ApprovalEventContributor` users.
+
+## Condition Routing
+
+The condition system controls which components are copied into the runtime event. This is how the engine supports jump/skip flows and contextual routing.
+
+Structure:
+
+```text
+Approval
+└── ApprovalCondition
+    └── ApprovalConditionComponent
+        └── ApprovalComponent
+```
+
+Rules:
+
+- Conditions are evaluated by highest `priority` first.
+- `priority = 0` is the default fallback condition and is created automatically when an approval is created.
+- A condition can contain multiple condition components.
+- Each condition component points to one approval component.
+- `expression = null` means the component always matches for that condition.
+- `expression` supports `all` (AND) and `any` (OR) routing logic.
+- Expression paths use Laravel `data_get` dot notation against `getApprovalConditions()`.
+- The first condition that produces at least one matched component wins.
+- Invalid expression structure or unsupported operators fail loudly with validation errors.
+
+Condition `all`/`any` is only for routing expressions. Component contributor approval logic is separate and uses `ContributorTypeEnum::AND` or `ContributorTypeEnum::OR`.
+
+Expression example:
+
+```php
+use Menma\Approval\Support\ApprovalExpression;
+
+ApprovalExpression::all()
+    ->where('requester.division', '==', 'HR')
+    ->where('amount', '>', 10000)
+    ->toArray();
+```
+
+This produces JSON-like data:
+
+```php
+[
+    'all' => [
+        ['path' => 'requester.division', 'operator' => '==', 'value' => 'HR'],
+        ['path' => 'amount', 'operator' => '>', 'value' => 10000],
+    ],
+]
+```
+
+Supported operators are configured in `config('approval.operators')`:
+
+```php
+['<', '>', '<=', '>=', '==', '!=']
+```
+
+### Contextual Routing Example
+
+Requirement: if requester division is HR, skip directly to manager approval. Otherwise use the default approval path.
+
+```text
+Approval: Operational Request
+├── Condition priority 1: requester.division == HR
+│   └── Manager Approval
+└── Condition priority 0: default fallback
+    ├── HR Approval
+    ├── Manager Approval
+    └── Finance Approval
+```
+
+Implementation shape:
+
+```php
+use Menma\Approval\Models\ApprovalCondition;
+use Menma\Approval\Models\ApprovalConditionComponent;
+use Menma\Approval\Support\ApprovalExpression;
+
+$hrShortcut = ApprovalCondition::create([
+    'approval_id' => $approval->id,
+    'priority' => 1,
+]);
+
+ApprovalConditionComponent::create([
+    'approval_condition_id' => $hrShortcut->id,
+    'approval_component_id' => $managerComponent->id,
+    'expression' => ApprovalExpression::all()
+        ->where('requester.division', '==', 'HR')
+        ->toArray(),
+]);
+```
+
+The default condition (`priority = 0`) already links new approval components automatically with `expression = null`. If no higher-priority condition selects components, the resolver falls back to the default path.
+
+## Using the Package
+
+### Prepare an App Model
+
+Extend `ApprovalAbstract` on models that need approval behavior.
+
+```php
+namespace App\Models;
+
 use Menma\Approval\Abstracts\ApprovalAbstract;
+use Menma\Approval\Models\ApprovalEvent;
 
 class PurchaseOrder extends ApprovalAbstract
 {
-    // Return users who can approve this specific record (if applicable)
-    public function getApproverIds(): array
-    {
-        return $this->user_id ? [$this->position->user_id] : [];
-    }
+    protected $guarded = [];
 
-    // Expose data for Conditional Logic
     public function getApprovalConditions(): array
     {
         return [
             'amount' => $this->amount,
-            'dept' => $this->department,
+            'requester' => [
+                'division' => $this->requester?->division?->name,
+                'position' => $this->requester?->position?->name,
+            ],
         ];
     }
 
-    // Lifecycle Hooks
-    protected function onApprove(ApprovalEvent $event): void { /* ... */ }
-    protected function onReject(ApprovalEvent $event): void { /* ... */ }
-    protected function onCancel(ApprovalEvent $event): void { /* ... */ }
-    protected function onRollback(ApprovalEvent $event): void { /* ... */ }
+    protected function onApprove(ApprovalEvent $event): void
+    {
+        $this->update(['approval_status' => $event->status->value]);
+    }
+
+    protected function onReject(ApprovalEvent $event): void
+    {
+        $this->update(['approval_status' => $event->status->value]);
+    }
 }
 ```
 
-### 2. Workflow Scenarios
-
-This plugin supports complex enterprise workflows. Here are the core scenarios:
-
-#### Scenario 1: Single User Approval
-
-A simple one-step workflow.
-
-#### Scenario 2: Parallel Multi-User (OR)
-
-Multiple approvers (e.g., HR, Finance) can approve in **any order**.
-
-- Configuration: `Approval Type = PARALLEL (0)`
-- `EventActionService` intelligently detects if the current user is a contributor to _any_ pending step.
-
-#### Scenario 3: Sequential Multi-User
-
-Strict ordering. Step 2 cannot be approved until Step 1 is complete.
-
-- Configuration: `Approval Type = SEQUENTIAL (1)`
-
-#### Scenario 4: Shared Step (OR Logic)
-
-A single step (e.g., "Manager Approval") assigned to multiple users. **Any one** of them can approve to complete the step.
-
-- Component Type: `OR (1)`
-
-#### Scenario 5: Shared Step (AND Logic)
-
-A single step assigned to a committee. **All assigned users** must approve for the step to complete.
-
-- Component Type: `AND (0)`
-
-#### Scenario 6: Conditional Approval (Dynamic Masking)
-
-Dynamically skip steps based on model data.
-_Example: "Director approval is only needed if Amount > 1000"._
-
-1. **Define Condition**:
-   ```php
-   ApprovalCondition::create([
-       'approval_id' => $approval->id,
-       'field' => 'amount',
-       'operator' => '<=',
-       'threshold' => '1000',
-       'max_step' => 0 // If Amount <= 1000, limit workflow to Step 0 (Manager only)
-   ]);
-   ```
-2. **Runtime**:
-    - If `PO Amount = 500`: Target Mask = `1` (Manager). Event approved after Manager action.
-    - If `PO Amount = 1500`: Target Mask = `3` (Manager + Director). Both required.
-
-## Configuration (Database Seeding)
-
-Since this plugin operates without a UI, approval workflows are defined programmatically via database records. This setup links your Models to specific Approval Flows and defines the logic (steps) and
-actors (contributors).
-
-### Entity Relationships
-
-- **ApprovalDictionary**: Registry of models (e.g., "Purchase Order").
-- **ApprovalFlow**: Container for the workflow.
-- **ApprovalFlowComponent**: The bridge connecting a Model (Dictionary) to a Flow.
-- **ApprovalGroup**: A collection of users (e.g., "Board Committee").
-
-### Seeder Example
+### Define a Workflow Blueprint
 
 ```php
-use Menma\Approval\Models\ApprovalDictionary;
-use Menma\Approval\Models\ApprovalFlow;
-use Menma\Approval\Models\ApprovalFlowComponent;
+use App\Models\PurchaseOrder;
+use App\Models\User;
+use Menma\Approval\Enums\ApprovalTypeEnum;
+use Menma\Approval\Enums\ContributorTypeEnum;
 use Menma\Approval\Models\Approval;
 use Menma\Approval\Models\ApprovalComponent;
 use Menma\Approval\Models\ApprovalContributor;
-use Menma\Approval\Models\ApprovalGroup;
-use Menma\Approval\Models\ApprovalGroupContributor;
-use Menma\Approval\Enums\ApprovalTypeEnum;
-use Menma\Approval\Enums\ContributorTypeEnum;
+use Menma\Approval\Models\ApprovalDictionary;
+use Menma\Approval\Models\ApprovalFlow;
+use Menma\Approval\Models\ApprovalFlowComponent;
 
-// 1. Register the Model (Dictionary)
 $dictionary = ApprovalDictionary::create([
-    'key' => 'App\Models\PurchaseOrder',
+    'key' => PurchaseOrder::class,
     'name' => 'Purchase Order',
 ]);
 
-// 2. Create the Flow
 $flow = ApprovalFlow::create([
-    'name' => 'Standard PO Workflow',
+    'name' => 'Purchase Order Flow',
 ]);
 
-// 3. Link Model to Flow
-// The 'key' MUST match your Model's morph class (getMorphClass())
 ApprovalFlowComponent::create([
     'approval_flow_id' => $flow->id,
     'approval_dictionary_id' => $dictionary->id,
-    'key' => 'App\Models\PurchaseOrder',
+    'key' => PurchaseOrder::class,
 ]);
 
-// 4. Define Logic Container
 $approval = Approval::create([
     'approval_flow_id' => $flow->id,
-    'name' => 'PO Logic v1',
-    'type' => ApprovalTypeEnum::SEQUENTIAL, // Enforces strict sequential order
+    'name' => 'Purchase Order Approval v1',
+    'type' => ApprovalTypeEnum::SEQUENTIAL,
 ]);
 
-// 5. Create Steps
-// Step 0: Manager (Bit 0)
-$stepManager = ApprovalComponent::create([
+// step is the bit position. Runtime mask becomes 1 << step.
+$managerComponent = ApprovalComponent::create([
     'approval_id' => $approval->id,
     'name' => 'Manager Approval',
     'step' => 0,
     'type' => ContributorTypeEnum::OR,
 ]);
 
-// Step 1: Board (Bit 1)
-$stepBoard = ApprovalComponent::create([
+$financeComponent = ApprovalComponent::create([
     'approval_id' => $approval->id,
-    'name' => 'Board Approval',
+    'name' => 'Finance Approval',
     'step' => 1,
-    'type' => ContributorTypeEnum::AND, // All members must approve
+    'type' => ContributorTypeEnum::AND,
 ]);
 
-// 6. Assign Contributors
-
-// 6a. Direct User (Manager)
 ApprovalContributor::create([
-    'approval_component_id' => $stepManager->id,
-    'approvable_type' => null, // Direct User
-    'approvable_id' => 1,      // User ID
+    'approval_component_id' => $managerComponent->id,
+    'approvable_type' => User::class,
+    'approvable_id' => $managerUser->id,
 ]);
 
-// 6b. Group (Board)
-$boardGroup = ApprovalGroup::create(['name' => 'Board Members']);
-ApprovalGroupContributor::create(['approval_group_id' => $boardGroup->id, 'user_id' => 2]);
-ApprovalGroupContributor::create(['approval_group_id' => $boardGroup->id, 'user_id' => 3]);
-
-// Assign Group to Step
 ApprovalContributor::create([
-    'approval_component_id' => $stepBoard->id,
-    'approvable_type' => ApprovalGroup::class,
-    'approvable_id' => $boardGroup->id,
+    'approval_component_id' => $financeComponent->id,
+    'approvable_type' => App\Models\Department::class,
+    'approvable_id' => $financeDepartment->id,
 ]);
 ```
 
-## API Reference
-
-### Triggering Actions
+### Execute Runtime Actions
 
 ```php
-// Initialize
-$foo->initEvent($user);
+$purchaseOrder->initEvent($requester);
 
-// Approve (Smart detection of step)
-$foo->approve($user);
+$purchaseOrder->approve($manager);
+$purchaseOrder->reject($financeUser);
+$purchaseOrder->cancel($manager);
+$purchaseOrder->rollback($admin);
 
-// Reject
-$foo->reject($user);
+// Force reset to draft, binary 0.
+$purchaseOrder->force($admin);
 
-// Cancel
-$foo->cancel($user);
-
-// Rollback
-$foo->rollback($user);
-
-// Force Approve (Skip Smart Detection)
-$foo->force($user, 5, ApprovalStatusEnum::DRAFT->value);
-
-// Check Status
-if ($foo->isApproved()) { ... }
+// Force specific binary state and status.
+$purchaseOrder->force($admin, 3, \Menma\Approval\Enums\ApprovalStatusEnum::APPROVED->value);
 ```
 
-### Manual Service Usage
-
-For custom implementations avoiding the Model trait:
+Manual service usage is also available:
 
 ```php
-$service = app(EventActionService::class);
-$service->approve($model, $user);
+$event = app(\Menma\Approval\Services\ApprovalService::class)
+    ->forBinary($purchaseOrder)
+    ->user($manager->id)
+    ->approve();
+```
+
+## Workflow Behavior
+
+### Sequential Approval
+
+`ApprovalTypeEnum::SEQUENTIAL` selects the first pending event component by step order when no explicit binary target is provided. The lower-level service API also accepts a binary target; use that only when the caller intentionally wants to address a specific event component.
+
+### Parallel Approval
+
+`ApprovalTypeEnum::PARALLEL` can select a pending component that belongs to the current user. This allows different branches or components to move without strict global ordering.
+
+### Contributor Logic
+
+Each component has `ContributorTypeEnum`:
+
+- `OR`: any contributor approval completes the component.
+- `AND`: all contributors must approve before the component is complete.
+
+Rejection behavior follows component logic. For OR components, one rejection rejects the component/event. For AND components, rejection is evaluated against approvals.
+
+### Partial Approval State
+
+The event can be partially approved because `step` and `target` are masks. A model can be in `DRAFT` while some components are already completed.
+
+### Jump and Skip
+
+Conditions can select a subset of components. This changes the generated `target` mask for that event. It is not a visual BPMN jump; it is runtime component selection before the event snapshot is created.
+
+### No-Contributor Components
+
+If a selected component has no resolved contributors, the component is automatically marked approved. If no selected component has any contributor, the entire event is approved.
+
+### Rollback
+
+`rollback()` resets the runtime event to draft state, clears contributor/component timestamps for the active event, re-resolves contributors, re-runs condition routing, and rebuilds the target mask from the current blueprint. It updates or creates selected event components; it is not documented as a destructive cleanup of every stale historical component row.
+
+### Force
+
+`force()` bypasses normal contributor validation and sets the event state directly. Calling `force($user)` with no binary resets the event to draft (`0`). Passing a non-zero binary with an approved status can mark matching component bits as approved.
+
+## Event Runtime Queries
+
+`ApprovalEvent` exposes useful accessors:
+
+- `is_approved`
+- `is_rejected`
+- `is_cancelled`
+- `is_rollback`
+- `can_approve`
+- `component`
+- `current_component`
+
+`can_approve` uses the current authenticated user (`Auth::id()`) and the next pending event component. If no user is authenticated, or the authenticated user is not a pending contributor, it returns false.
+
+The package isolates bitwise SQL in `BitmaskQueryService` so mask queries can be implemented per database driver instead of scattering raw bit operations across the codebase.
+
+## Practical Use Cases
+
+- HR request workflow: route HR-originated requests directly to manager approval, while other divisions pass through HR first.
+- Recruitment approval: recruiter, HR manager, department manager, and finance can be selected based on position, department, and salary range.
+- Leave request: short leave can require manager only; long leave can add HR or director approval.
+- Procurement approval: approval depth can change based on amount, category, department, or budget owner.
+- Operational request flow: field requests can skip office-only components and route to the relevant operations role.
+- Finance approval: invoice or reimbursement approval can combine department, finance, and executive layers.
+
+## Technical Philosophy
+
+Approval Binary is designed around:
+
+- config-driven workflow records instead of hardcoded approval branches
+- runtime event snapshots instead of mutable blueprint execution
+- reusable orchestration services
+- dynamic contributor resolution
+- condition-based component routing
+- bitmask state for compact partial approval tracking
+- abstraction-first integration through model hooks and resolver interfaces
+
+The package is meant to be extended by application code: define your own contributor resolver models, expose your own condition data, and use lifecycle hooks to connect approval results back into your domain.
+
+## Testing
+
+```bash
+./vendor/bin/pest
 ```
 
 ## License
