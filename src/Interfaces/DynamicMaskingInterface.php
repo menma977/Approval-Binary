@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -25,9 +27,9 @@ namespace Menma\Approval\Interfaces;
  * Implement this interface on models that need dynamic approval target masks
  * based on their properties (e.g., procurement value, priority level, etc.).
  *
- * When a model implements this interface, the BinaryService will evaluate
- * the model's conditions against ApprovalCondition rules to determine
- * which ApprovalComponents should be included in the approval flow.
+ * When a model implements this interface, the resolver evaluates condition
+ * component JSON expressions against this data to decide which components
+ * are copied into a new approval event snapshot.
  *
  * Models that do NOT implement this interface will continue using
  * the existing static bitmask behavior (all components included).
@@ -39,31 +41,25 @@ namespace Menma\Approval\Interfaces;
  *     public function getApprovalConditions(): array
  *     {
  *         return [
- *             'value' => $this->total_amount,
- *             'priority' => $this->priority_level,
+ *             'amount' => $this->total_amount,
+ *             'user' => [
+ *                 'position' => [
+ *                     'name' => $this->user?->position?->name,
+ *                 ],
+ *             ],
  *         ];
  *     }
- *
- *     public function getApproverIds(): array
- *     {
- *         return [];
- *     }
  * }
- *
- * The returned array keys must match the 'field' column in the
- * approval_conditions table. The values will be compared against
- * the 'threshold' using the configured 'operator'.
  */
 interface DynamicMaskingInterface
 {
 	/**
-	 * Get the key-value pairs used to evaluate approval conditions.
+	 * Get data used by approval condition component expressions.
 	 *
-	 * Each key represents a condition field name (must match the 'field'
-	 * column in approval_conditions table), and each value is the current
-	 * model property to compare against the threshold.
+	 * Expression paths use Laravel data_get dot notation, for example:
+	 * user.position.name, amount, department.code.
 	 *
-	 * @return array<string, mixed> Associative array of field => value pairs
+	 * @return array<string, mixed>
 	 */
 	public function getApprovalConditions(): array;
 }

@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -29,10 +31,9 @@ use Menma\Approval\Enums\ContributorTypeEnum;
 
 /**
  * @property string $id
- * @property int|null $company_id
  * @property string $approval_event_id
  * @property string $name
- * @property int $step The step using binary 1 -> 10 -> 100 -> 1000
+ * @property int $step Component approval bitmask: 1, 2, 4, 8, etc.
  * @property ContributorTypeEnum $type The type of approval logic (0:and/1:or)
  * @property string $color
  * @property Carbon|null $approved_at
@@ -64,7 +65,6 @@ use Menma\Approval\Enums\ContributorTypeEnum;
  * @method static Builder<static>|ApprovalEventComponent whereApprovedAt($value)
  * @method static Builder<static>|ApprovalEventComponent whereCancelledAt($value)
  * @method static Builder<static>|ApprovalEventComponent whereColor($value)
- * @method static Builder<static>|ApprovalEventComponent whereCompanyId($value)
  * @method static Builder<static>|ApprovalEventComponent whereCreatedAt($value)
  * @method static Builder<static>|ApprovalEventComponent whereCreatedBy($value)
  * @method static Builder<static>|ApprovalEventComponent whereDeletedAt($value)
@@ -94,7 +94,6 @@ class ApprovalEventComponent extends ApprovalCoreAbstract
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		'company_id',
 		'approval_event_id',
 		'name',
 		'step',

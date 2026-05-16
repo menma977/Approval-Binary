@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -26,7 +28,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
 
 /**
  * @property string $id
- * @property int|null $company_id
  * @property string $approval_group_id
  * @property int $user_id
  * @property int|null $created_by
@@ -46,7 +47,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
  * @method static Builder<static>|ApprovalGroupContributor onlyTrashed()
  * @method static Builder<static>|ApprovalGroupContributor query()
  * @method static Builder<static>|ApprovalGroupContributor whereApprovalGroupId($value)
- * @method static Builder<static>|ApprovalGroupContributor whereCompanyId($value)
  * @method static Builder<static>|ApprovalGroupContributor whereCreatedAt($value)
  * @method static Builder<static>|ApprovalGroupContributor whereCreatedBy($value)
  * @method static Builder<static>|ApprovalGroupContributor whereDeletedAt($value)
@@ -65,7 +65,6 @@ class ApprovalGroupContributor extends ApprovalCoreAbstract
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		'company_id',
 		'approval_group_id',
 		'user_id',
 		'created_by',

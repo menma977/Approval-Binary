@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -26,7 +28,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
 
 /**
  * @property string $id
- * @property int|null $company_id
  * @property string $approval_flow_id
  * @property string $approval_dictionary_id
  * @property string $key
@@ -48,7 +49,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
  * @method static Builder<static>|ApprovalFlowComponent query()
  * @method static Builder<static>|ApprovalFlowComponent whereApprovalDictionaryId($value)
  * @method static Builder<static>|ApprovalFlowComponent whereApprovalFlowId($value)
- * @method static Builder<static>|ApprovalFlowComponent whereCompanyId($value)
  * @method static Builder<static>|ApprovalFlowComponent whereCreatedAt($value)
  * @method static Builder<static>|ApprovalFlowComponent whereCreatedBy($value)
  * @method static Builder<static>|ApprovalFlowComponent whereDeletedAt($value)
@@ -67,7 +67,6 @@ class ApprovalFlowComponent extends ApprovalCoreAbstract
 	 * The attributes that are mass-assignable.
 	 */
 	protected $fillable = [
-		'company_id',
 		'approval_flow_id',
 		'approval_dictionary_id',
 		'key',

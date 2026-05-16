@@ -31,16 +31,14 @@ return new class extends Migration {
 			$table->id();
 			$table->ulid()->unique();
 			$table->foreignId('approval_id')->constrained('approvals')->cascadeOnDelete();
-			$table->string('field')->comment('The property name from getApprovalConditions() to compare');
-			$table->string('operator')->comment('Comparison operator: <, >, <=, >=, ==, !=');
-			$table->string('threshold')->comment('The value to compare against');
-			$table->integer('max_step')->comment('Maximum component step to include (inclusive). Steps 0..max_step will be included.');
-			$table->integer('priority')->default(0)->comment('Higher priority conditions are evaluated first. First match wins.');
+			$table->integer('priority')->default(0)->comment('Higher priority conditions are evaluated first. Priority 0 is the default fallback.');
 			$table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
 			$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
 			$table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
 			$table->timestamps();
 			$table->softDeletes();
+
+			$table->unique(['approval_id', 'priority']);
 		});
 	}
 

@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -22,9 +24,19 @@ namespace Menma\Approval\Abstracts;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Menma\Approval\Observers\AuditObserver;
 use Menma\Approval\Traits\AuditByTrait;
 
 class ApprovalCoreAbstract extends Model
 {
 	use HasUlids, SoftDeletes, AuditByTrait;
+
+	protected static function boot(): void
+	{
+		parent::boot();
+
+		if (config('approval.is_auditable')) {
+			static::observe(AuditObserver::class);
+		}
+	}
 }

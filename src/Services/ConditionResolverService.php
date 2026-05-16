@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -22,31 +24,24 @@ namespace Menma\Approval\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Menma\Approval\Interfaces\DynamicMaskingInterface;
+use Menma\Approval\Models\ApprovalComponent;
 use Menma\Approval\Models\ApprovalCondition;
 
 /**
- * Resolves which approval components should be included in the approval flow
- * based on conditional dynamic masking rules.
- *
- * If the model implements DynamicMaskingInterface, this service evaluates
- * the model's condition data against ApprovalCondition rules to determine
- * which components should be included (filtered by max_step).
- *
- * Conditions are evaluated in priority order (highest first).
- * The first matching condition wins and its max_step is used to filter.
- *
- * If the model does NOT implement DynamicMaskingInterface, or no conditions
- * match, all components are returned unchanged (existing static behavior).
+ * Resolves approval components from condition groups.
+ * Higher priority conditions are checked first; priority 0 is default fallback.
  */
 class ConditionResolverService
 {
+	public function __construct(private readonly ConditionExpressionService $expressionService)
+	{
+	}
+
 	/**
-	 * Filters approval components based on conditional dynamic masking.
-	 *
 	 * @param Model $model The model being approved
-	 * @param Collection $approvalComponent The full set of approval components
+	 * @param Collection<int, ApprovalComponent> $approvalComponent The full set of approval components
 	 * @param int|null $approvalId The approval ID to query conditions for
-	 * @return Collection The filtered (or unfiltered) collection of components
+	 * @return Collection<int, ApprovalComponent>
 	 */
 	public function resolve(Model $model, Collection $approvalComponent, ?int $approvalId): Collection
 	{
@@ -54,7 +49,8 @@ class ConditionResolverService
 			return $approvalComponent;
 		}
 
-		$conditions = ApprovalCondition::where('approval_id', $approvalId)
+		$conditions = ApprovalCondition::with('conditionComponents.component')
+			->where('approval_id', $approvalId)
 			->orderByDesc('priority')
 			->get();
 
@@ -62,19 +58,20 @@ class ConditionResolverService
 			return $approvalComponent;
 		}
 
+		$componentById = $approvalComponent->keyBy('id');
 		$modelConditions = $model->getApprovalConditions();
-		$maxStep = null;
 
 		foreach ($conditions as $condition) {
-			$fieldValue = $modelConditions[$condition->field] ?? null;
-			if ($fieldValue !== null && $condition->evaluate($fieldValue)) {
-				$maxStep = $condition->max_step;
-				break;
-			}
-		}
+			$matchedComponents = $condition->conditionComponents
+				->filter(fn($conditionComponent): bool => $this->expressionService->matches($conditionComponent->expression, $modelConditions))
+				->map(fn($conditionComponent) => $componentById->get($conditionComponent->approval_component_id))
+				->filter()
+				->sortBy('step')
+				->values();
 
-		if ($maxStep !== null) {
-			return $approvalComponent->filter(fn($component) => $component->step <= $maxStep);
+			if ($matchedComponents->isNotEmpty()) {
+				return $matchedComponents;
+			}
 		}
 
 		return $approvalComponent;

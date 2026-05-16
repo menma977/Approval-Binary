@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -26,7 +28,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
 
 /**
  * @property string $id
- * @property int|null $company_id
  * @property string $key
  * @property string $name
  * @property int|null $created_by
@@ -45,7 +46,6 @@ use Menma\Approval\Abstracts\ApprovalCoreAbstract;
  * @method static Builder<static>|ApprovalDictionary newQuery()
  * @method static Builder<static>|ApprovalDictionary onlyTrashed()
  * @method static Builder<static>|ApprovalDictionary query()
- * @method static Builder<static>|ApprovalDictionary whereCompanyId($value)
  * @method static Builder<static>|ApprovalDictionary whereCreatedAt($value)
  * @method static Builder<static>|ApprovalDictionary whereCreatedBy($value)
  * @method static Builder<static>|ApprovalDictionary whereDeletedAt($value)

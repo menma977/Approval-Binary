@@ -1,4 +1,6 @@
 <?php
+
+declare(strict_types=1);
 /*******************************************************************************
  * Approval-Binary - Binary bitmask-based approval workflows for Laravel
  * Copyright (C) 2026 menma977 <https://github.com/menma977/Approval-Binary>
@@ -51,7 +53,7 @@ return [
 	| How it works:
 	| 1. Admin creates ApprovalComponent (approval step)
 	| 2. Admin adds ApprovalContributor records with:
-	|    - Direct User: approvable_type = null, approvable_id = user_id
+	|    - Direct User: approvable_type = App\Models\User::class, approvable_id = user_id
 	|    - Role/Group/etc: approvable_type = Role::class, approvable_id = role_id
 	| 3. When approval is initiated:
 	|    - System checks if approvable_type is in this 'group' array
@@ -106,8 +108,7 @@ return [
 	|--------------------------------------------------------------------------
 	|
 	| Allowed operators for approval conditions.
-	| These are used to compare model properties against thresholds
-	| in the approval_conditions table.
+	| These are used by approval condition component expressions.
 	|
 	| Models that implement DynamicMaskingInterface can have their
 	| approval target mask dynamically determined based on these conditions.
@@ -115,4 +116,3 @@ return [
 	*/
 	"operators" => ["<", ">", "<=", ">=", "==", "!="],
 ];
-

@@ -33,7 +33,7 @@ return new class extends Migration {
 			$table->ulid()->unique();
 			$table->foreignId('approval_id')->constrained('approvals')->cascadeOnDelete();
 			$table->string('name');
-			$table->integer('step')->default(0)->comment('The step using binary system: 1, 2, 3, 4, etc.');
+			$table->integer('step')->default(0)->comment('Component bit position: 0, 1, 2, 3, etc.');
 			$table->integer('type')->default(ContributorTypeEnum::OR->value)->comment('The type of approval logic (0:and/1:or)');
 			$table->string('color')->default('#000000')->comment('The color of the component');
 			$table->boolean('can_drag')->default(true);

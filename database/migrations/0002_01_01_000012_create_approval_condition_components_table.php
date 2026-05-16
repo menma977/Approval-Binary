@@ -24,25 +24,22 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
 	/**
 	 * Run the migrations.
-	 *
-	 * @noinspection DuplicatedCode
 	 */
 	public function up(): void
 	{
-		Schema::create('approval_event_contributors', function (Blueprint $table) {
-			$table->ulid('id')->primary()->index();
-			$table->foreignUlid('approval_event_component_id')->constrained('approval_event_components')->cascadeOnDelete();
-			$table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-			$table->timestamp('approved_at')->nullable();
-			$table->timestamp('rejected_at')->nullable();
-			$table->timestamp('cancelled_at')->nullable();
-			$table->timestamp('rollback_at')->nullable();
+		Schema::create('approval_condition_components', function (Blueprint $table) {
+			$table->id();
+			$table->ulid()->unique();
+			$table->foreignId('approval_condition_id')->constrained('approval_conditions')->cascadeOnDelete();
+			$table->foreignId('approval_component_id')->constrained('approval_components')->cascadeOnDelete();
+			$table->json('expression')->nullable()->comment('Optional JSON expression. Null means this component always matches the condition.');
 			$table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
 			$table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
 			$table->foreignId('deleted_by')->nullable()->constrained('users')->nullOnDelete();
 			$table->timestamps();
 			$table->softDeletes();
-			$table->index(['approval_event_component_id', 'user_id']);
+
+			$table->unique(['approval_condition_id', 'approval_component_id'], 'approval_condition_component_unique');
 		});
 	}
 
@@ -51,6 +48,6 @@ return new class extends Migration {
 	 */
 	public function down(): void
 	{
-		Schema::dropIfExists('approval_event_contributors');
+		Schema::dropIfExists('approval_condition_components');
 	}
 };
